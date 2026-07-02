@@ -36,14 +36,14 @@ def train_model(
     model: torch.nn.Module,
     train_loader: DataLoader,
     test_loader: DataLoader,
-    edge_index: torch.Tensor | None = None,
+    adjacency: torch.Tensor | None = None,
     epochs: int = 20,
     lr: float = 1e-3,
     device: torch.device | None = None,
 ) -> tuple[list[float], list[float], torch.nn.Module]:
     device = device or resolve_device()
     model = model.to(device)
-    edge_index = edge_index.to(device) if edge_index is not None else None
+    adjacency = adjacency.to(device) if adjacency is not None else None
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     train_losses: list[float] = []
     test_losses: list[float] = []
@@ -56,7 +56,7 @@ def train_model(
             batch_x = batch_x.to(device)
             batch_y = batch_y.to(device)
             optimizer.zero_grad()
-            loss = quantile_loss(model(batch_x, edge_index), batch_y)
+            loss = quantile_loss(model(batch_x, adjacency), batch_y)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
@@ -64,7 +64,7 @@ def train_model(
             train_samples += batch_x.size(0)
 
         train_loss = total_train_loss / max(train_samples, 1)
-        test_loss = evaluate_loss(model, test_loader, edge_index=edge_index, device=device)
+        test_loss = evaluate_loss(model, test_loader, adjacency=adjacency, device=device)
         train_losses.append(train_loss)
         test_losses.append(test_loss)
         print(f"Epoch {epoch + 1:03d}/{epochs:03d} | train_loss={train_loss:.6f} | test_loss={test_loss:.6f}")
@@ -75,7 +75,7 @@ def train_model(
 def evaluate_loss(
     model: torch.nn.Module,
     loader: DataLoader,
-    edge_index: torch.Tensor | None = None,
+    adjacency: torch.Tensor | None = None,
     device: torch.device | None = None,
 ) -> float:
     device = device or resolve_device()
@@ -86,7 +86,7 @@ def evaluate_loss(
         for batch_x, batch_y in loader:
             batch_x = batch_x.to(device)
             batch_y = batch_y.to(device)
-            loss = quantile_loss(model(batch_x, edge_index), batch_y)
+            loss = quantile_loss(model(batch_x, adjacency), batch_y)
             total_loss += loss.item() * batch_x.size(0)
             samples += batch_x.size(0)
     return total_loss / max(samples, 1)
@@ -105,22 +105,22 @@ def train_graph_experiment(
 ) -> tuple[torch.nn.Module, pd.DataFrame]:
     train_loader = make_loader(data.x_train, data.y_train, batch_size=batch_size, shuffle=True)
     test_loader = make_loader(data.x_test, data.y_test, batch_size=batch_size, shuffle=False)
-    _, _, trained_model = train_model(model, train_loader, test_loader, edge_index=data.edge_index, epochs=epochs, lr=lr)
-    predictions = predict(trained_model, test_loader, edge_index=data.edge_index)
+    _, _, trained_model = train_model(model, train_loader, test_loader, adjacency=data.adjacency, epochs=epochs, lr=lr)
+    predictions = predict(trained_model, test_loader, adjacency=data.adjacency)
     predictions = inverse_transform_quantiles(data.target_scaler, predictions)
     y_true = inverse_transform_quantiles(data.target_scaler, as_numpy(data.y_test).reshape(-1, 1)).reshape(-1)
     return trained_model, prediction_frame(y_true, predictions)
 
 
-def predict(model: torch.nn.Module, loader: DataLoader, edge_index: torch.Tensor | None = None) -> np.ndarray:
+def predict(model: torch.nn.Module, loader: DataLoader, adjacency: torch.Tensor | None = None) -> np.ndarray:
     device = resolve_device()
     model = model.to(device)
-    edge_index = edge_index.to(device) if edge_index is not None else None
+    adjacency = adjacency.to(device) if adjacency is not None else None
     outputs = []
     model.eval()
     with torch.no_grad():
         for batch_x, _ in loader:
-            outputs.append(model(batch_x.to(device), edge_index).detach().cpu().numpy())
+            outputs.append(model(batch_x.to(device), adjacency).detach().cpu().numpy())
     return np.concatenate(outputs, axis=0)
 
 

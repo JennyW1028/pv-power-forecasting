@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seq-len", type=int, default=None)
     parser.add_argument("--points-per-day", type=int, default=None)
     parser.add_argument("--train-ratio", type=float, default=None)
+    parser.add_argument("--graph-threshold", type=float, default=None)
     parser.add_argument("--hidden-dim", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None)
@@ -54,6 +55,7 @@ def main() -> None:
     seq_len = pick(args, config, "seq_len")
     points_per_day = pick(args, config, "points_per_day")
     train_ratio = pick(args, config, "train_ratio")
+    graph_threshold = pick(args, config, "graph_threshold")
     hidden_dim = pick(args, config, "hidden_dim")
     batch_size = pick(args, config, "batch_size")
     epochs = pick(args, config, "epochs")
@@ -75,6 +77,7 @@ def main() -> None:
                     seq_len=seq_len,
                     points_per_day=points_per_day,
                     train_ratio=train_ratio,
+                    graph_threshold=graph_threshold,
                 )
             model = build_model(
                 model_name,

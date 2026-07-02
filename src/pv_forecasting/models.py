@@ -146,7 +146,7 @@ class DenseGAT(nn.Module):
 class GCNInformer(nn.Module):
     def __init__(self, num_nodes: int, input_features: int, hidden_dim: int = 32, seq_len: int = 24, num_gcn_layers: int = 2, num_encoder_layers: int = 1, num_heads: int = 4, embed_dim: int = 64):
         super().__init__()
-        self.adaptive_adj = AdaptiveAdjacency(num_nodes, embed_dim)
+        self.num_nodes = num_nodes
         layers = [DenseGCN(input_features, hidden_dim)]
         layers.extend(DenseGCN(hidden_dim, hidden_dim) for _ in range(num_gcn_layers - 1))
         self.gcn_layers = nn.ModuleList(layers)
@@ -155,8 +155,8 @@ class GCNInformer(nn.Module):
         self.fc2 = nn.Linear(hidden_dim // 2, 3)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor | None = None) -> torch.Tensor:
-        adj = self.adaptive_adj()
+    def forward(self, x: torch.Tensor, adjacency: torch.Tensor | None = None) -> torch.Tensor:
+        adj = adjacency if adjacency is not None else torch.eye(self.num_nodes, device=x.device)
         outputs = []
         for step in range(x.size(1)):
             x_t = x[:, step, :, :]
@@ -174,9 +174,7 @@ class GCNInformer(nn.Module):
 class GATInformer(nn.Module):
     def __init__(self, num_nodes: int, input_features: int, hidden_dim: int = 32, seq_len: int = 24, num_gat_layers: int = 1, num_encoder_layers: int = 1, num_heads: int = 4, static_embed_dim: int = 32, dynamic_hidden_dim: int = 16, gat_dropout: float = 0.2):
         super().__init__()
-        self.static_adj = AdaptiveAdjacency(num_nodes, static_embed_dim)
-        self.dynamic_adj = DynamicAdjacency(input_features, dynamic_hidden_dim)
-        self.fusion_alpha = nn.Parameter(torch.tensor(0.5))
+        self.num_nodes = num_nodes
         layers = [DenseGAT(input_features, hidden_dim, num_heads=num_heads, concat=False, dropout=gat_dropout)]
         layers.extend(DenseGAT(hidden_dim, hidden_dim, num_heads=num_heads, concat=False, dropout=gat_dropout) for _ in range(num_gat_layers - 1))
         self.gat_layers = nn.ModuleList(layers)
@@ -185,14 +183,11 @@ class GATInformer(nn.Module):
         self.fc2 = nn.Linear(hidden_dim // 2, 3)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor | None = None) -> torch.Tensor:
-        static_adj = self.static_adj().unsqueeze(0)
-        alpha = torch.sigmoid(self.fusion_alpha)
+    def forward(self, x: torch.Tensor, adjacency: torch.Tensor | None = None) -> torch.Tensor:
+        adj = adjacency if adjacency is not None else torch.eye(self.num_nodes, device=x.device)
         outputs = []
         for step in range(x.size(1)):
             x_t = x[:, step, :, :]
-            dynamic_adj = self.dynamic_adj(x_t)
-            adj = alpha * static_adj + (1.0 - alpha) * dynamic_adj
             for layer_idx, layer in enumerate(self.gat_layers):
                 x_t = layer(x_t, adj)
                 if layer_idx != len(self.gat_layers) - 1:
@@ -207,7 +202,7 @@ class GATInformer(nn.Module):
 class GCNLSTM(nn.Module):
     def __init__(self, num_nodes: int, input_features: int, hidden_dim: int = 32, seq_len: int = 24, num_gcn_layers: int = 2, num_lstm_layers: int = 1, embed_dim: int = 64, lstm_dropout: float = 0.0):
         super().__init__()
-        self.adaptive_adj = AdaptiveAdjacency(num_nodes, embed_dim)
+        self.num_nodes = num_nodes
         layers = [DenseGCN(input_features, hidden_dim)]
         layers.extend(DenseGCN(hidden_dim, hidden_dim) for _ in range(num_gcn_layers - 1))
         self.gcn_layers = nn.ModuleList(layers)
@@ -216,8 +211,8 @@ class GCNLSTM(nn.Module):
         self.fc2 = nn.Linear(hidden_dim // 2, 3)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor | None = None) -> torch.Tensor:
-        adj = self.adaptive_adj()
+    def forward(self, x: torch.Tensor, adjacency: torch.Tensor | None = None) -> torch.Tensor:
+        adj = adjacency if adjacency is not None else torch.eye(self.num_nodes, device=x.device)
         outputs = []
         for step in range(x.size(1)):
             x_t = x[:, step, :, :]
@@ -265,7 +260,7 @@ class QuantileLSTM(nn.Module):
                 n = param.size(0)
                 param.data[n // 4 : n // 2].fill_(1)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, adjacency: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = x.size(0)
         x = self.input_dropout(self.value_embedding(x))
         h0 = torch.zeros(self.num_layers, batch_size, self.hidden_size, device=x.device)
@@ -305,7 +300,7 @@ class QuantileInformer(nn.Module):
         )
         nn.init.normal_(self.position_embedding, std=0.02)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, adjacency: torch.Tensor | None = None) -> torch.Tensor:
         x = self.value_embedding(x) + self.position_embedding
         for layer in self.encoder_layers:
             x = layer(x)

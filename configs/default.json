@@ -1,13 +1,14 @@
 {
   "data_dir": "data_vmd",
-  "results_dir": "results",
+  "results_dir": "results/generated_predictions",
   "seq_len": 24,
   "points_per_day": 120,
   "train_ratio": 0.8,
   "hidden_dim": 32,
   "batch_size": 64,
-  "epochs": 20,
+  "epochs": 50,
   "learning_rate": 0.001,
+  "graph_threshold": 0.6,
   "quantiles": [0.1, 0.5, 0.9],
   "seed": 42
 }

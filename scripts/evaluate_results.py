@@ -14,8 +14,8 @@ from pv_forecasting.metrics import prediction_interval_metrics, regression_metri
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate prediction CSV files.")
-    parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
-    parser.add_argument("--output", type=Path, default=ROOT / "results" / "metrics_summary.csv")
+    parser.add_argument("--results-dir", type=Path, default=ROOT / "results" / "notebook_exports")
+    parser.add_argument("--output", type=Path, default=ROOT / "results" / "notebook_exports" / "notebook_export_metrics.csv")
     return parser.parse_args()
 
 

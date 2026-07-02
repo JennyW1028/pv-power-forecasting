@@ -1,70 +1,99 @@
-# Photovoltaic Power Forecasting Code
+# VMD-GCN-Informer Photovoltaic Cluster Forecasting
 
-This folder contains a cleaned, submission-ready version of the forecasting code used in the manuscript experiments. The original notebooks and source files were not modified.
+This repository contains the submission-oriented code for the manuscript:
 
-## Folder Layout
+**Probabilistic Power Forecasting for Photovoltaic Plant Clusters Using VMD-GCN-Informer**
+
+The code is organized to match the manuscript pipeline: VMD-enhanced input features, Pearson-correlation graph construction, GCN/GAT spatial modeling, Informer or LSTM temporal modeling, and quantile regression for probabilistic forecasting.
+
+## Repository Layout
 
 ```text
-submission_code/
-  configs/default.json          Default experiment settings.
-  data_vmd/                     Processed seven-site VMD input data.
-  results/                      Existing prediction CSV files from the notebook runs.
-  scripts/train.py              Re-train one model or all models.
-  scripts/evaluate_results.py   Compute metrics from prediction CSV files.
-  scripts/plot_results.py       Generate publication-style diagnostic plots.
-  src/pv_forecasting/           Reusable data, model, training, and metric code.
+configs/default.json              Default manuscript-style settings.
+data_vmd/                         Processed seven-site VMD input data.
+results/reported/                 Values reported in the manuscript tables.
+results/notebook_exports/         Prediction CSV files exported from earlier notebooks.
+figures/                          Diagnostic plots generated from notebook exports.
+scripts/train.py                  Re-train one model or all models.
+scripts/evaluate_results.py       Evaluate prediction CSV files.
+scripts/plot_results.py           Generate diagnostic plots from prediction CSV files.
+src/pv_forecasting/               Reusable data, model, training, and metric code.
 ```
 
 ## Environment
 
-Python 3.9 or later is recommended. Install dependencies with:
+Python 3.9 or later is recommended.
 
 ```bash
 pip install -r requirements.txt
 ```
 
-The training code automatically uses CUDA when a compatible GPU is available.
+CUDA is used automatically when a compatible GPU is available.
 
-## Reproducing Experiments
+## Manuscript Settings
 
-Run from this folder:
+The default configuration follows the manuscript:
 
-```bash
-python scripts/train.py --model all --epochs 20
+- Seven PV sites from the DKASC Yulara dataset.
+- VMD-processed input files in `data_vmd/`.
+- Chronological train/test split: first 80% of days for training and remaining 20% for testing.
+- Sequence length: 24 samples.
+- Sampling interval: 5 minutes.
+- Pearson correlation graph constructed from training-set active power.
+- Graph threshold: 0.6.
+- Hidden dimension: 32.
+- GCN layers: 2.
+- Optimizer: Adam.
+- Learning rate: 0.001.
+- Epochs: 50.
+- Quantiles: 0.1, 0.5, and 0.9.
+
+## Reported Results
+
+The manuscript tables are stored separately from raw prediction exports:
+
+```text
+results/reported/table3_model_comparison.csv
+results/reported/table4_multi_horizon_mae.csv
+results/reported/table5_seasonal_metrics.csv
 ```
 
-Train a single model:
+This separation is intentional. The files in `results/notebook_exports/` are prediction CSV files exported from earlier notebook runs and are kept for auditability. They are not treated as the authoritative manuscript tables.
+
+## Re-training
+
+Run from the repository root:
 
 ```bash
-python scripts/train.py --model gcn-informer --epochs 20
-python scripts/train.py --model gat-informer --epochs 20
-python scripts/train.py --model gcn-lstm --epochs 20
-python scripts/train.py --model informer --epochs 20
-python scripts/train.py --model lstm --epochs 20
+python scripts/train.py --model gcn-informer
 ```
 
-Evaluate saved prediction files:
+Train all implemented models:
 
 ```bash
-python scripts/evaluate_results.py --results-dir results
+python scripts/train.py --model all
 ```
 
-Generate plots:
+New prediction files are written to `results/generated_predictions/` by default, so they do not overwrite the reported manuscript tables.
+
+## Evaluation and Plotting
+
+Evaluate prediction CSV files:
 
 ```bash
-python scripts/plot_results.py --results-dir results --output-dir figures
+python scripts/evaluate_results.py --results-dir results/notebook_exports
 ```
 
-## Output Format
+Generate diagnostic plots:
 
-Each prediction CSV uses the same schema:
+```bash
+python scripts/plot_results.py --results-dir results/notebook_exports --output-dir figures
+```
+
+Prediction CSV files use:
 
 ```text
 y_true,q0.1,q0.5,q0.9
 ```
 
-The columns correspond to observed aggregated active power and the 0.1, 0.5, and 0.9 quantile forecasts.
-
-## Notes
-
-The `data_vmd` directory contains processed input data with English file names for submission convenience. The large raw source data are intentionally excluded from this folder.
+where `q0.1`, `q0.5`, and `q0.9` are the 10th, 50th, and 90th percentile forecasts for aggregated PV cluster active power.

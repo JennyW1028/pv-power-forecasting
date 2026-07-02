@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Plot prediction diagnostics.")
-    parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
+    parser.add_argument("--results-dir", type=Path, default=ROOT / "results" / "notebook_exports")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "figures")
     parser.add_argument("--max-points", type=int, default=600)
     return parser.parse_args()

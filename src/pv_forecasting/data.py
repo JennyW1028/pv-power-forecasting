@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,7 @@ class GraphData:
     y_test: torch.Tensor
     target_scaler: MinMaxScaler
     feature_scalers: List[MinMaxScaler]
-    edge_index: torch.Tensor
+    adjacency: torch.Tensor
     feature_names: List[str]
 
 
@@ -73,6 +73,31 @@ def split_by_date(frames: Sequence[pd.DataFrame], train_ratio: float = 0.8) -> T
     return train_frames, test_frames
 
 
+def build_correlation_adjacency(
+    frames: Sequence[pd.DataFrame],
+    target_column: str = "Active_Power",
+    threshold: float = 0.6,
+    include_self: bool = True,
+) -> torch.Tensor:
+    power_matrix = pd.concat([frame[target_column].reset_index(drop=True) for frame in frames], axis=1)
+    corr = power_matrix.corr(method="pearson").abs().fillna(0.0).to_numpy()
+    adjacency = (corr >= threshold).astype(np.float32)
+    if include_self:
+        np.fill_diagonal(adjacency, 1.0)
+    else:
+        np.fill_diagonal(adjacency, 0.0)
+    return torch.tensor(adjacency, dtype=torch.float32)
+
+
+def select_feature_columns(frame: pd.DataFrame, feature_columns: Sequence[str] | None = None) -> List[str]:
+    if feature_columns is None:
+        return list(frame.columns)
+    missing = [name for name in feature_columns if name not in frame.columns]
+    if missing:
+        raise KeyError(f"Missing feature columns: {missing}")
+    return list(feature_columns)
+
+
 def create_graph_windows(
     site_arrays: Sequence[np.ndarray],
     targets: np.ndarray,
@@ -101,9 +126,13 @@ def prepare_graph_data(
     seq_len: int = 24,
     points_per_day: int = 120,
     train_ratio: float = 0.8,
+    graph_threshold: float = 0.6,
+    feature_columns: Sequence[str] | None = None,
 ) -> GraphData:
     frames = load_site_frames(data_dir)
     train_frames, test_frames = split_by_date(frames, train_ratio=train_ratio)
+    selected_columns = select_feature_columns(train_frames[0], feature_columns)
+    adjacency = build_correlation_adjacency(train_frames, threshold=graph_threshold)
 
     feature_scalers: List[MinMaxScaler] = []
     x_train_arrays: List[np.ndarray] = []
@@ -111,8 +140,8 @@ def prepare_graph_data(
 
     for train_frame, test_frame in zip(train_frames, test_frames):
         scaler = MinMaxScaler()
-        x_train_arrays.append(scaler.fit_transform(train_frame))
-        x_test_arrays.append(scaler.transform(test_frame))
+        x_train_arrays.append(scaler.fit_transform(train_frame[selected_columns]))
+        x_test_arrays.append(scaler.transform(test_frame[selected_columns]))
         feature_scalers.append(scaler)
 
     train_target = sum(frame["Active_Power"] for frame in train_frames)
@@ -132,8 +161,8 @@ def prepare_graph_data(
         y_test=y_test_tensor,
         target_scaler=target_scaler,
         feature_scalers=feature_scalers,
-        edge_index=DEFAULT_EDGE_INDEX.clone(),
-        feature_names=list(train_frames[0].columns),
+        adjacency=adjacency,
+        feature_names=selected_columns,
     )
 
 
@@ -163,9 +192,11 @@ def prepare_station_data(
     points_per_day: int = 120,
     train_ratio: float = 0.8,
     target_column: str = "Active_Power",
+    feature_columns: Sequence[str] | None = None,
 ) -> StationData:
     frames = load_site_frames(data_dir)
     train_frames, test_frames = split_by_date(frames, train_ratio=train_ratio)
+    selected_columns = select_feature_columns(train_frames[0], feature_columns)
 
     x_train: List[torch.Tensor] = []
     y_train: List[torch.Tensor] = []
@@ -178,8 +209,8 @@ def prepare_station_data(
         feature_scaler = MinMaxScaler()
         target_scaler = MinMaxScaler()
 
-        train_features = feature_scaler.fit_transform(train_frame)
-        test_features = feature_scaler.transform(test_frame)
+        train_features = feature_scaler.fit_transform(train_frame[selected_columns])
+        test_features = feature_scaler.transform(test_frame[selected_columns])
         train_targets = target_scaler.fit_transform(train_frame[[target_column]]).reshape(-1)
         test_targets = target_scaler.transform(test_frame[[target_column]]).reshape(-1)
 
@@ -200,7 +231,7 @@ def prepare_station_data(
         y_test=y_test,
         target_scalers=target_scalers,
         feature_scalers=feature_scalers,
-        input_features=train_frames[0].shape[1],
+        input_features=len(selected_columns),
     )
 
 
